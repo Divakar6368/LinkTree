@@ -3,6 +3,7 @@
 import { db } from "@/lib/db"
 import { currentUser } from "@clerk/nextjs/server"
 import { LinkFormData } from "../components/link-form";
+import { SocialLinkFormData } from "../components/social-link-model";
 
 
 
@@ -33,26 +34,133 @@ export const createLinkByUser=async (data:LinkFormData)=>{
 }
 
 
-export const getAllLinkForUser=async()=>{
-    const user=await currentUser();
-    const links=await db.link.findMany({
+export const getAllLinkForUser = async()=>{
+    const user = await currentUser();
+
+    const links = await db.link.findMany({
         where:{
             user:{
                 clerkId:user?.id
             }
         },
         select:{
+            id:true,
             title:true,
             description:true,
-            id:true,
             url:true,
+            clickCount:true,
             createdAt:true,
-            clickCount:true
+            
+        }
+    });
+
+    return {
+        success:true,
+        message:"Gets All Link successfully",
+        data:links
+    }
+
+}
+
+
+export const addSocialLink=async(data:SocialLinkFormData)=>{
+    const user=await currentUser();
+     if(!user) return {
+        success:false ,error:"No User Found"
+    }
+
+    const socialLink=await db.socialLink.create({
+        data:{
+            platform:data.platform,
+            url:data.url,
+            user:{
+                connect:{
+                    clerkId:user.id
+                }
+            }
         }
     })
     return{
         success:true,
-        message:"Get All Links Successfully",
-        data:links
+        message:"Social Links  added  Successfully",
+        data:socialLink
     }
+}
+
+export const editSocialLink = async(data:SocialLinkFormData,socialLinkId:string)=>{
+    const user = await currentUser();
+
+    if (!user) return { success: false, error: "No authenticated user found" };
+
+    await db.socialLink.update({where:{id:socialLinkId , user:{clerkId:user.id}},data:data});
+    return {sucess:true, message:"Social link updated successfully!"}
+}
+
+
+export const getPreviewData = async()=>{
+    const user = await currentUser();
+
+    if (!user) {
+        return {
+            success: false,
+            message: "No authenticated user found",
+            data: []
+        };
+    }
+
+    const links = await db.link.findMany({
+        where: {
+            user: {
+                clerkId: user.id
+            }
+        },
+        include: {
+            user: {
+                select: {
+                    firstName: true,
+                    lastName: true,
+                    username: true,
+                    bio: true,
+                    imageUrl: true,
+                }
+            }
+        },
+        orderBy: {
+            createdAt: 'desc'
+        }
+    });
+
+    return {
+        success: true,
+        message: "Gets All Link successfully",
+        data: links
+    }
+}
+
+
+export const deleteLink = async(linkId:string)=>{
+    const user = await currentUser();
+
+    if (!user) return { success: false, error: "No authenticated user found" };
+
+    await db.link.delete({where:{id:linkId}});
+    return {sucess:true, message:"Link deleted successfully!"}
+}
+
+export const editLink = async(data:LinkFormData,linkId:string)=>{
+    const user = await currentUser();
+
+    if (!user) return { success: false, error: "No authenticated user found" };
+
+    await db.link.update({where:{id:linkId , user:{clerkId:user.id}},data:data});
+    return {sucess:true, message:"Link updated successfully!"}
+}
+
+export const deleteSocialLink = async(socialLinkId:string)=>{
+    const user = await currentUser();
+
+    if (!user) return { success: false, error: "No authenticated user found" };
+
+    await db.socialLink.delete({where:{id:socialLinkId}});
+    return {sucess:true, message:"Social link deleted successfully!"}
 }

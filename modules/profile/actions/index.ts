@@ -2,6 +2,7 @@
 import { db } from "@/lib/db"
 import { currentUser } from "@clerk/nextjs/server"
 import { getAvailableUsernameSuggestions } from "../utils"
+import { ProfileFormData } from "@/modules/links/components/link-form"
 
 
 export const checkProfileUsernameAvailability = async (username: string) => {
@@ -53,9 +54,51 @@ export const getCurrentUsername=async()=>{
             clerkId:user?.id
         },
         select:{
+            firstName:true,
+            lastName:true,
             username:true,
             bio:true,
+            socialLinks:true
         } 
     })
     return currentUsername;
+}
+
+
+export const createUserProfile=async(data:ProfileFormData)=>{
+    const user=await currentUser();
+    if(!user) return { success:false,error:"No user Found"}
+
+    const profile=await db.user.update({
+        where:{
+            clerkId:user.id
+        },
+        data:{
+            firstName:data.firstName,
+            lastName:data.lastName,
+            bio:data.bio,
+            imageUrl:data.imageUrl,
+            username:data.username
+        }
+    })
+
+    return {
+        success:true,
+        message:"Profile Updated Successfuly",
+        data:profile
+    }
+}
+
+
+export const getUserByUsername=async(username:string)=>{
+    const currentUser=await db.user.findUnique({
+        where:{
+            username:username
+        },
+        include:{
+            links:true,
+            socialLinks:true
+        }
+    })
+    return currentUser;
 }

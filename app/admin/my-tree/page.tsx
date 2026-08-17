@@ -1,12 +1,17 @@
 
 import { Button } from "@/components/ui/button"
+import { getAllLinkForUser, getPreviewData } from "@/modules/links/actions";
 import LinkForm from "@/modules/links/components/link-form";
+import PreviewFrame from "@/modules/links/components/preview-form";
+import ShareMenu from "@/modules/links/components/share-menu";
 import { getCurrentUsername } from "@/modules/profile/actions";
 import { Brush, Share } from "lucide-react";
 import React from "react"
 
-const Page = async() => {
+const Page = async () => {
     const profile = await getCurrentUsername();
+    const links = await getAllLinkForUser();
+    const previewData = await getPreviewData();
     return (
         <section className="flex flex-col gap-6 px-6 py-6">
             <div className="flex flex-row items-center justify-between w-full">
@@ -19,14 +24,7 @@ const Page = async() => {
                         <Brush size={16} />
                         Design
                     </Button>
-                    <Button
-                        variant='default'
-                        size="default"
-                        className="gap-2"
-                    >
-                        <Share size={16} />
-                        Share
-                    </Button>
+                    <ShareMenu username={profile?.username!} />
                 </div>
             </div>
 
@@ -34,7 +32,21 @@ const Page = async() => {
                 <div className="order-2 lg:order-1 border-r">
                     <LinkForm
                         username={profile?.username!}
-                        bio={profile?.bio} 
+                        // @ts-ignore
+                        bio={profile?.bio}
+                        // @ts-ignore
+                        link={links.data}
+                        // @ts-ignore"
+                        socialLinks={profile?.socialLinks}
+                    />
+                </div>
+                <div className="order-1 lg:order-2 lg:sticky lg:top-6">
+                    <PreviewFrame
+                        links={previewData.data.map((link: any) => ({
+                            ...link,
+                            description:
+                                link.description === null ? undefined : link.description,
+                        }))}
                     />
                 </div>
             </div>

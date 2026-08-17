@@ -11,21 +11,23 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { FaInstagram, FaYoutube } from "react-icons/fa";
 import {
     Plus,
-    // Instagram,
-    // Youtube,
     Mail,
     Archive,
     FolderPlus,
     Camera,
     Edit3,
     X,
+    Icon,
 } from "lucide-react";
 import { useUser } from "@clerk/nextjs";
-import { getCurrentUsername } from "../../profile/actions";
+import { createUserProfile, getCurrentUsername } from "../../profile/actions";
 import { LinkFormWithPreview, LinkCard } from "./link-card";
-import { createLinkByUser } from "../actions";
+import { addSocialLink, createLinkByUser, deleteLink, deleteSocialLink, editLink, editSocialLink } from "../actions";
+import { SocialLinkModal } from "./social-link-model";
+
 
 const profileSchema = z.object({
     firstName: z
@@ -60,9 +62,14 @@ const linkSchema = z.object({
         .optional(),
 });
 
+const socialLinksSchema = z.object({
+    platform: z.enum(["instagram", "youtube", "email"]),
+    url: z.url().min(1, "Url is Required")
+})
 
 export type ProfileFormData = z.infer<typeof profileSchema>
 export type LinkFormData = z.infer<typeof linkSchema>
+export type socialLinksData = z.infer<typeof socialLinksSchema>
 
 interface Props {
     username: string,
@@ -75,6 +82,7 @@ interface Props {
         clickCount: number;
         createdAt: Date;
     }[],
+    socialLinks?: SocialLink[]
 }
 
 interface Link {
@@ -93,7 +101,16 @@ interface Profile {
     imageUrl?: string;
 
 }
-const LinkForm = ({ username, bio, link }: Props) => {
+
+
+interface SocialLink {
+    id: string;
+    platform: "instagram" | "youtube" | "email";
+    url: string;
+}
+
+
+const LinkForm = ({ username, bio, link, socialLinks: initialSocialLinks = [] }: Props) => {
     const currentUser = useUser();
 
     const [editingProfile, setEditingProfile] = useState(false);
@@ -101,7 +118,16 @@ const LinkForm = ({ username, bio, link }: Props) => {
     const [links, setLinks] = useState<Link[]>(link || []);
     const [editingLinkId, setEditingLinkId] = useState<string | null>(null);
 
+    const [userSocialLinks, setUserSocialLinks] = useState<SocialLink[]>(initialSocialLinks);
+    const [isSocialModalOpen, setIsSocialModalOpen] = useState(false);
+    const [editingSocialLink, setEditingSocialLink] = useState<SocialLink | null>(null);
 
+
+
+    const handleAddSocialLink = () => {
+        setEditingSocialLink(null);
+        setIsSocialModalOpen(true);
+    }
 
     const [profile, setProfile] = useState<Profile>({
         firstName: currentUser.user?.firstName || "",
@@ -134,7 +160,24 @@ const LinkForm = ({ username, bio, link }: Props) => {
     });
 
 
-    const onProfileSubmit = async (data: ProfileFormData) => { }
+    const onProfileSubmit = async (data: ProfileFormData) => {
+        try {
+            setProfile((prev) => ({ ...prev, ...data }));
+
+            const updatedProfile = await createUserProfile(data);
+
+            console.log("Updated Profile:", updatedProfile)
+            toast.success("Profile Updated Succesfully!");
+
+        } catch (error) {
+            console.log(error)
+            toast.success("Failed to Update Profile!");
+        }
+        finally {
+            profileForm.reset();
+            setEditingProfile(false);
+        }
+    }
     const onLinkSubmit = async (data: LinkFormData) => {
         try {
             const link = await createLinkByUser(data);
@@ -156,8 +199,71 @@ const LinkForm = ({ username, bio, link }: Props) => {
     }
 
 
-    const onEditLinkSubmit = async (data: LinkFormData) => {
+    const onSocialLinkSubmit = async (data: socialLinksData) => {
+        try {
+            if (editingSocialLink) {
+                const result = await editSocialLink(data, editingSocialLink.id);
 
+                if (result?.sucess) {
+                    setUserSocialLinks((prev) =>
+                        prev.map((link) =>
+                            link.id === editingSocialLink.id
+                                ? { ...link, platform: data.platform, url: data.url }
+                                : link
+                        )
+                    );
+                    toast.success(`${data.platform} link updated successfully!`);
+                } else {
+                    toast.error(result?.error || "Failed to update social link.");
+                }
+
+            }
+            else {
+                const result = await addSocialLink(data);
+                if (result?.success && result?.data) {
+                    const newSocialLink: SocialLink = {
+                        id: result.data.id,
+                        platform: data.platform,
+                        url: data.url,
+                    };
+                    setUserSocialLinks((prev) => [...prev, newSocialLink]);
+                    toast.success(`${data.platform} link added successfully!`);
+                } else {
+                    toast.error(result?.error || "Failed to add social link.");
+                }
+            }
+
+        } catch (error) {
+            console.error("Error saving social link:", error);
+            toast.error("Failed to save social link.");
+        }
+        finally {
+            setEditingSocialLink(null);
+        }
+    }
+
+
+
+
+    const onEditLinkSubmit = async (data: LinkFormData) => {
+        if (!editingLinkId) return;
+        try {
+            const res = await editLink(data, editingLinkId);
+            if (res?.sucess) {
+                setLinks((prev) =>
+                    prev.map((l) => (l.id === editingLinkId ? { ...l, ...data } : l))
+                );
+                toast.success("Link edited successfully!");
+            } else {
+                toast.error(res?.error || "Failed to edit link.");
+            }
+        } catch (error) {
+            console.error("Error editing link:", error);
+            toast.error("Failed to edit link.");
+        } finally {
+            setIsAddingLink(false);
+            setEditingLinkId(null);
+        }
     }
 
     const handleEditLink = (linkId: string) => {
@@ -166,6 +272,48 @@ const LinkForm = ({ username, bio, link }: Props) => {
     };
 
 
+    const getSocialIcon = (platform: string) => {
+        switch (platform) {
+            case "instagram":
+                return FaInstagram;
+            case "youtube":
+                return FaYoutube;
+            case "email":
+                return Mail;
+            default:
+                return Mail;
+        }
+    };
+
+    const handleDeleteLink = async (linkId: string) => {
+        try {
+            console.log("hdshfkefhlik")
+            const deletedLink = await deleteLink(linkId);
+            console.log("Deleted Link:", deletedLink);
+            setLinks((prev) => prev.filter((link) => link.id !== linkId));
+            toast.success("Link deleted successfully!");
+        } catch (error) {
+            console.error("Error deleting link:", error);
+            toast.error("Failed to delete link.");
+        }
+    };
+
+
+
+    const handleDeleteSocialLink = async (socialLinkId: string) => {
+        try {
+            const result = await deleteSocialLink(socialLinkId);
+            if (result?.sucess) {
+                setUserSocialLinks((prev) => prev.filter((link) => link.id !== socialLinkId));
+                toast.success("Social link removed successfully!");
+            } else {
+                toast.error(result?.error || "Failed to delete social link.");
+            }
+        } catch (error) {
+            console.error("Error deleting social link:", error);
+            toast.error("Failed to delete social link.");
+        }
+    };
 
     return (
         <div className="w-full max-w-2xl mx-auto space-y-6">
@@ -274,6 +422,45 @@ const LinkForm = ({ username, bio, link }: Props) => {
                             )}
                         </div>
                     </div>
+
+                    {/* social links */}
+
+                    <div className="mt-4 flex gap-2 flex-wrap">
+                        {
+                            userSocialLinks.map((socialLink) => {
+                                const Icon = getSocialIcon(socialLink.platform);
+                                return (
+                                    <div key={socialLink.id} className="relative group">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="h-9 w-9 p-0 bg-transparent"
+                                            onClick={() => window.open(socialLink.url, '_blank')}
+                                        >
+                                            <Icon size={16} />
+                                        </Button>
+                                        <Button
+                                            size="sm"
+                                            variant="destructive"
+                                            className="absolute -top-2 -right-2 h-5 w-5 rounded-full p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                            onClick={() => handleDeleteSocialLink(socialLink.id)}
+                                        >
+                                            <X size={10} />
+                                        </Button>
+                                    </div>
+                                )
+                            })
+                        }
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-9 w-9 p-0 border-dashed bg-transparent"
+                            onClick={handleAddSocialLink}
+                        >
+                            <Plus size={16} />
+                        </Button>
+
+                    </div>
                 </CardContent>
             </Card>
 
@@ -282,7 +469,7 @@ const LinkForm = ({ username, bio, link }: Props) => {
                     <LinkCard
                         key={link.id}
                         link={link}
-                        onDelete={() => { }}
+                        onDelete={() => { handleDeleteLink }}
                         onEdit={handleEditLink}
                     />
                 ))}
@@ -317,6 +504,18 @@ const LinkForm = ({ username, bio, link }: Props) => {
                 }
 
             </div>
+
+            <SocialLinkModal
+                isOpen={isSocialModalOpen}
+                onClose={() => setIsSocialModalOpen(false)}
+                onSubmit={onSocialLinkSubmit}
+                defaultValues={editingSocialLink ? {
+                    platform: editingSocialLink.platform,
+                    url: editingSocialLink.url
+                } : undefined}
+            />
+
+
         </div>
     )
 }

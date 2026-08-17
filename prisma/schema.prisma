@@ -7,31 +7,76 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User{
-  id String @id @default(cuid())
-  clerkId String @unique
-  email String @unique
+model User {
+  id       String  @id @default(cuid())
+  clerkId  String  @unique
+  email    String  @unique
   username String? @unique
 
   firstName String?
-  lastName String?
-  imageUrl String?
+  lastName  String?
+  imageUrl  String?
 
-  links Link[]
-  bio String? @db.VarChar(500)
+  links        Link[]
+  socialLinks  SocialLink[]
+  profileViews ProfileAnalytics[]
+
+  bio       String?  @db.VarChar(500)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
+model Link {
+  id          String  @id @default(cuid())
+  title       String
+  url         String
+  description String? @db.VarChar(500)
+  clickCount  Int     @default(0)
 
-model Link{
-   id String @id @default(cuid())
-   title String
-   url String
-   description String? @db.VarChar(500)
-   clickCount Int @default(0)
+  userId    String
+  analytics LinkAnalytics[]
 
-   userId String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime? @updatedAt
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
 
-   user User @relation(fields: [userId],references: [id],onDelete: Cascade)
+model SocialLink {
+  id       String @id @default(cuid())
+  platform String
+  url      String
+  userId   String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model LinkAnalytics {
+  id        String   @id @default(cuid())
+  linkId    String
+  clickedAt DateTime
+  clickerIp String   @db.VarChar(45)
+
+  link      Link     @relation(fields: [linkId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([linkId, clickerIp, clickedAt])
+  @@index([clickedAt, linkId])
+}
+
+model ProfileAnalytics {
+  id        String   @id @default(cuid())
+  userId    String
+  visitedAt DateTime @default(now())
+  visitorIp String   @db.VarChar(45)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([visitedAt, userId])
 }
